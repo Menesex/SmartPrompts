@@ -1,0 +1,316 @@
+/* Identidad visual de SmartPrompts: oscuro violeta, fijo por diseño. */
+
+:root {
+  --bg-surface: #16121f;
+  --bg-raised: #1e1830;
+  --border: #32284f;
+  --border-soft: #241d38;
+  --text-primary: #f1ecfb;
+  --text-secondary: #9c8fc2;
+  --text-tertiary: #6f6390;
+  --accent: #b455f0;
+  --tag-importante: #e8a33d;
+  --tag-orden: #45c4d6;
+  --tag-foto: #b455f0;
+  --tag-relacionado: #e8709a;
+  --ok: #6fd18a;
+  --warn: #e8a33d;
+  --error: #e8709a;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+html, body {
+  height: 100%;
+  background: transparent; /* la ventana de Electron es transparente */
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+#palette {
+  position: absolute;
+  inset: 12px; /* margen para que se vea la sombra */
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(180, 85, 240, 0.06),
+    0 24px 48px -16px rgba(0, 0, 0, 0.7),
+    0 0 70px -18px rgba(180, 85, 240, 0.3);
+  overflow: hidden;
+}
+
+/* ---------- header ---------- */
+
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  -webkit-app-region: drag; /* arrastrable */
+  user-select: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.brand-mark {
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent), #7a2fc4);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+}
+
+kbd {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- editor con etiquetas coloreadas ---------- */
+
+#composer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#editorWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#highlights,
+#editor {
+  position: absolute;
+  inset: 0;
+  padding: 14px 18px;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  border: 0;
+}
+
+#highlights {
+  pointer-events: none;
+  color: var(--text-primary);
+}
+
+#editor {
+  background: transparent;
+  color: transparent; /* el texto visible lo pinta #highlights */
+  caret-color: var(--accent);
+  outline: 0;
+  resize: none;
+}
+
+#editor::placeholder { color: var(--text-tertiary); }
+#editor::selection { background: rgba(180, 85, 240, 0.32); color: transparent; }
+
+.hl { border-radius: 4px; padding: 1px 2px; font-weight: 600; }
+.hl-importante { color: var(--tag-importante); background: rgba(232, 163, 61, 0.13); }
+.hl-orden { color: var(--tag-orden); background: rgba(69, 196, 214, 0.13); }
+.hl-categoria { color: var(--ok); background: rgba(111, 209, 138, 0.13); }
+.hl-relacionado { color: var(--tag-relacionado); background: rgba(232, 112, 154, 0.13); }
+.hl-foto { color: var(--tag-foto); background: rgba(180, 85, 240, 0.15); }
+
+/* ---------- tira de fotos capturadas ---------- */
+
+#photoStrip {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+
+.photo-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid rgba(180, 85, 240, 0.45);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--tag-foto);
+  white-space: nowrap;
+}
+
+.photo-chip img {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.photo-chip button {
+  background: none;
+  border: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+.photo-chip button:hover { color: var(--error); }
+
+/* ---------- ajustes ---------- */
+
+#settings {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+#settings h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+
+#settings label { font-size: 12.5px; color: var(--text-secondary); margin-top: 4px; }
+#settings .hint { color: var(--text-tertiary); font-size: 11.5px; }
+
+#settings input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  outline: none;
+}
+#settings input:focus { border-color: var(--accent); }
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.settings-actions .spacer { flex: 1; }
+
+/* ---------- footer ---------- */
+
+#footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+}
+
+.footer-left, .footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#status {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#status.ok { color: var(--ok); }
+#status.warn { color: var(--warn); }
+#status.error { color: var(--error); }
+
+.engine-status {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ---------- botones ---------- */
+
+button { cursor: pointer; font-family: inherit; }
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn:hover { background: rgba(180, 85, 240, 0.12); color: var(--text-primary); }
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+#micBtn.recording {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.12);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { #micBtn.recording { animation: none; } }
+
+.accent-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: #1a0a29;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.accent-btn svg { width: 12px; height: 12px; }
+.accent-btn:hover { filter: brightness(1.1); }
+.accent-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.ghost-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.ghost-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+.danger-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.danger-btn:hover { color: var(--error); border-color: var(--error); }

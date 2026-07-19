@@ -1,63 +1,232 @@
-const { app, BrowserWindow, globalShortcut, clipboard, nativeImage } = require('electron');
+// Proceso principal de SmartPrompts: ventanas, atajo global, bandeja, IPC.
+// La lógica de negocio vive en /core y el historial en /data.
+
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, session, nativeImage } = require('electron');
 const path = require('path');
-const { keyboard, Key } = require('@nut-tree-fork/nut-js');
+const fs = require('fs');
 
-const HOTKEY = 'Alt+Shift+V';
-const TEST_IMAGE_PATH = path.join(__dirname, 'test-assets', 'foto-prueba.png');
+const ajustes = require('./core/settings');
+const groq = require('./core/groqClient');
+const { deliver } = require('./core/delivery');
+const { buildDeliveryText } = require('./core/promptBuilder');
+const { tagNames } = require('./core/tagEngine');
+const { init: initDb } = require('./data/db');
 
-let win;
+const ScreenshotsMod = require('electron-screenshots');
+const Screenshots = ScreenshotsMod.default || ScreenshotsMod;
 
-function createWindow() {
+// Cuadrado violeta de marca, embebido para no depender de archivos sueltos.
+const ICON_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAIAAACxN37FAAACl0lEQVR4nO3SUQkAIBTAwFfSpgYzgiUEYRxcgH1s9jqQMd8L4CFDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphiblApOo8vYkDQFdAAAAAElFTkSuQmCC';
+
+const ANCHO = 680;
+const ALTO = 480;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let win = null;
+let tray = null;
+let screenshots = null;
+let db = null;
+let config = null;
+let atajoActivo = null;
+let capturando = false;
+let entregando = false;
+
+// Una sola instancia: si abren otra, se muestra la palette de la existente.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => mostrarPalette());
+}
+
+const status = (msg, kind = '') => win && win.webContents.send('status', msg, kind);
+
+function crearVentana() {
   win = new BrowserWindow({
-    width: 520,
-    height: 360,
-    title: 'SmartPrompts — spike de pegado de imagen',
+    width: ANCHO,
+    height: ALTO,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    icon: nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64),
+    webPreferences: {
+      preload: path.join(__dirname, 'ui', 'preload.js'),
+    },
   });
-  win.loadFile('index.html');
+  win.loadFile(path.join('ui', 'palette.html'));
+
+  // Como toda command palette: se esconde al perder el foco (el borrador no se pierde).
+  win.on('blur', () => {
+    if (!capturando && !entregando) win.hide();
+  });
 }
 
-async function pasteTestImage() {
-  console.log('[SmartPrompts spike] Atajo detectado, copiando imagen de prueba al portapapeles...');
+function mostrarPalette() {
+  if (!win) return;
+  const area = screen.getPrimaryDisplay().workArea;
+  win.setPosition(Math.round(area.x + (area.width - ANCHO) / 2), area.y + 140);
+  win.show();
+  win.focus();
+}
 
-  const image = nativeImage.createFromPath(TEST_IMAGE_PATH);
-  if (image.isEmpty()) {
-    console.error('[SmartPrompts spike] No se pudo cargar la imagen de prueba en', TEST_IMAGE_PATH);
-    return;
-  }
-  clipboard.writeImage(image);
+function togglePalette() {
+  if (win.isVisible()) win.hide();
+  else mostrarPalette();
+}
 
-  // pequeña pausa para que el portapapeles quede listo antes del paste simulado
-  await new Promise((resolve) => setTimeout(resolve, 150));
+function capturarRegion() {
+  return new Promise((resolve) => {
+    const onOk = (_e, buffer) => { limpiar(); resolve(buffer); };
+    const onCancel = () => { limpiar(); resolve(null); };
+    const limpiar = () => {
+      screenshots.off('ok', onOk);
+      screenshots.off('cancel', onCancel);
+    };
+    screenshots.on('ok', onOk);
+    screenshots.on('cancel', onCancel);
+    screenshots.startCapture();
+  });
+}
 
+/* ---------- IPC ---------- */
+
+ipcMain.handle('get-state', () => ({
+  hotkey: atajoActivo || 'sin atajo',
+  model: config.model,
+  hasKey: Boolean(config.apiKey),
+}));
+
+ipcMain.handle('save-settings', (_e, partial = {}) => {
+  if (partial.apiKey) config.apiKey = partial.apiKey;
+  if (partial.model) config.model = partial.model;
+  ajustes.save(app.getPath('userData'), config);
+  return { ok: true };
+});
+
+ipcMain.handle('test-connection', async () => {
   try {
-    await keyboard.pressKey(Key.LeftControl, Key.V);
-    await keyboard.releaseKey(Key.LeftControl, Key.V);
-    console.log('[SmartPrompts spike] Ctrl+V simulado. Revisá la ventana donde tenías el foco antes de apretar el atajo.');
+    if (!config.apiKey) return { ok: false, error: 'primero pegá tu API key y guardá' };
+    const models = await groq.listModels(config);
+    return { ok: true, models };
   } catch (err) {
-    console.error('[SmartPrompts spike] Error simulando el paste:', err);
+    return { ok: false, error: err.message };
   }
-}
+});
+
+ipcMain.handle('transcribe', async (_e, arrayBuffer) => {
+  try {
+    if (!config.apiKey) return { ok: false, error: 'configurá tu API key de Groq en ⚙' };
+    const text = await groq.transcribe(Buffer.from(arrayBuffer), config);
+    return { ok: true, text };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('capture', async () => {
+  capturando = true;
+  win.hide(); // así se ve la pantalla que estaba debajo, que es lo que se quiere capturar
+  await sleep(300);
+  try {
+    const buffer = await capturarRegion();
+    if (!buffer) return { canceled: true };
+    const dir = path.join(app.getPath('userData'), 'screenshots');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `captura-${Date.now()}.png`);
+    fs.writeFileSync(file, buffer);
+    return { path: file };
+  } catch (err) {
+    return { canceled: true, error: err.message };
+  } finally {
+    capturando = false;
+    mostrarPalette();
+  }
+});
+
+ipcMain.handle('send', async (_e, { text, photos = [] }) => {
+  entregando = true;
+  try {
+    let refined = null;
+    if (config.apiKey) {
+      status('refinando con Groq…');
+      try {
+        refined = await groq.refinePrompt(text, config);
+      } catch (err) {
+        status(`Groq falló (${err.message}) — envío el texto sin refinar`, 'warn');
+      }
+    }
+    const base = refined || text;
+    const { deliveredText, photoPaths } = buildDeliveryText(base, photos);
+
+    await deliver({
+      deliveredText,
+      photoPaths,
+      hideWindow: () => win.hide(),
+      onStatus: status,
+    });
+
+    if (db) {
+      db.saveDelivery({
+        rawText: text,
+        refinedText: refined,
+        deliveredText,
+        photos,
+        tagNames: tagNames(base),
+      });
+    }
+    return { ok: true };
+  } catch (err) {
+    status(`error al entregar: ${err.message}`, 'error');
+    return { ok: false, error: err.message };
+  } finally {
+    entregando = false;
+  }
+});
+
+ipcMain.handle('hide', () => win.hide());
+ipcMain.handle('quit', () => app.quit());
+
+/* ---------- arranque ---------- */
 
 app.whenReady().then(() => {
-  createWindow();
+  app.setAppUserModelId('com.menesex.smartprompts');
+  config = ajustes.load(app.getPath('userData'));
+  db = initDb(app.getPath('userData'));
 
-  const registered = globalShortcut.register(HOTKEY, pasteTestImage);
-  if (!registered) {
-    console.error(`[SmartPrompts spike] No se pudo registrar el atajo ${HOTKEY} (¿ya lo usa otra app?)`);
-  } else {
-    console.log(`[SmartPrompts spike] Listo. Enfocá el chat de destino y apretá ${HOTKEY}.`);
-  }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  // Permitir el micrófono (dictado por voz) sin diálogo del sistema Chromium.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
+    cb(permission === 'media');
   });
+
+  crearVentana();
+  screenshots = new Screenshots({ singleWindow: true });
+
+  for (const atajo of ['Alt+Space', 'Ctrl+Alt+Space', 'Ctrl+Shift+Space']) {
+    if (globalShortcut.register(atajo, togglePalette)) {
+      atajoActivo = atajo;
+      break;
+    }
+  }
+  if (!atajoActivo) console.error('[SmartPrompts] no pude registrar ningún atajo global');
+
+  const icon = nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64);
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  tray.setToolTip('SmartPrompts');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: `Abrir / ocultar (${atajoActivo || 'sin atajo'})`, click: togglePalette },
+    { type: 'separator' },
+    { label: 'Salir', click: () => app.quit() },
+  ]));
+  tray.on('click', togglePalette);
+
+  console.log(`[SmartPrompts] listo — atajo global: ${atajoActivo}`);
+  mostrarPalette();
 });
 
-app.on('window-all-closed', () => {
-  globalShortcut.unregisterAll();
-  if (process.platform !== 'darwin') app.quit();
-});
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-});
+// Sin ventanas visibles la app sigue viva en la bandeja; solo se cierra desde "Salir".
+app.on('window-all-closed', (e) => e.preventDefault());

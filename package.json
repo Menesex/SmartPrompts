@@ -4,8 +4,7 @@
   "description": "Command palette de escritorio para armar prompts de IA con voz, capturas de pantalla citadas y etiquetas [BRACKET].",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "generate-test-image": "node generate-test-image.js"
+    "start": "electron ."
   },
   "repository": {
     "type": "git",
@@ -23,6 +22,7 @@
     "electron": "^43.1.1"
   },
   "dependencies": {
-    "@nut-tree-fork/nut-js": "^4.2.6"
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "electron-screenshots": "^0.6.2"
   }
 }

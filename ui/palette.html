@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self'" />
+<title>SmartPrompts</title>
+<link rel="stylesheet" href="palette.css" />
+</head>
+<body>
+<div id="palette">
+
+  <header id="header">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      SmartPrompts
+    </div>
+    <div class="header-right">
+      <kbd id="hotkeyChip">…</kbd>
+      <button id="settingsBtn" class="icon-btn" title="Ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="composer">
+    <div id="editorWrap">
+      <div id="highlights" aria-hidden="true"></div>
+      <textarea id="editor" spellcheck="false" autofocus
+        placeholder="Escribí o dictá tu prompt… usá [IMPORTANTE], [ORDEN:1] y el botón de captura para citar imágenes como {foto1}"></textarea>
+    </div>
+    <div id="photoStrip" hidden></div>
+  </main>
+
+  <section id="settings" hidden>
+    <h2>Ajustes</h2>
+    <label for="apiKeyInput">API key de Groq <span class="hint">(gratis en console.groq.com/keys)</span></label>
+    <input id="apiKeyInput" type="password" placeholder="gsk_..." autocomplete="off" />
+    <label for="modelInput">Modelo de texto</label>
+    <input id="modelInput" list="modelsList" autocomplete="off" />
+    <datalist id="modelsList"></datalist>
+    <div class="settings-actions">
+      <button id="testBtn" class="ghost-btn">Probar conexión</button>
+      <button id="saveBtn" class="accent-btn">Guardar</button>
+      <span class="spacer"></span>
+      <button id="quitBtn" class="danger-btn">Cerrar SmartPrompts</button>
+    </div>
+  </section>
+
+  <footer id="footer">
+    <div class="footer-left">
+      <button id="micBtn" class="icon-btn" title="Dictar por voz">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      </button>
+      <button id="camBtn" class="icon-btn" title="Capturar región de pantalla y citarla">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+      </button>
+      <span id="status">listo</span>
+    </div>
+    <div class="footer-right">
+      <span id="modelBadge" class="engine-status"></span>
+      <button id="sendBtn" class="accent-btn" title="Ctrl+Enter">
+        Enviar
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </footer>
+
+</div>
+<script src="palette.js"></script>
+</body>
+</html>
