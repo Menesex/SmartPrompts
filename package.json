@@ -1,0 +1,28 @@
+{
+  "name": "smartprompts",
+  "version": "1.0.0",
+  "description": "Command palette de escritorio para armar prompts de IA con voz, capturas de pantalla citadas y etiquetas [BRACKET].",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "generate-test-image": "node generate-test-image.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Menesex/SmartPrompts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Menesex/SmartPrompts/issues"
+  },
+  "homepage": "https://github.com/Menesex/SmartPrompts#readme",
+  "devDependencies": {
+    "electron": "^43.1.1"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6"
+  }
+}
