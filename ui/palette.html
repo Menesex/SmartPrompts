@@ -17,6 +17,9 @@
     </div>
     <div class="header-right">
       <kbd id="hotkeyChip">…</kbd>
+      <button type="button" id="pinBtn" class="icon-btn" title="Fijar: mantener esta ventana abierta aunque hagas clic afuera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.4-1.4A2 2 0 0 1 17 14.2V8a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6.2a2 2 0 0 1-.6 1.4z"/></svg>
+      </button>
       <button type="button" id="helpBtn" class="icon-btn" title="Ayuda: etiquetas y botones">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </button>
@@ -44,7 +47,14 @@
       <dt><code>[RELACIONADO: ...]</code></dt><dd>vincula con otra parte o imagen</dd>
       <dt><code>{foto1}</code></dt><dd>cita la captura n.º 1 (se agrega sola al capturar)</dd>
     </dl>
-    <p class="hint">🎤 dicta por voz · 📷 captura una región y la cita · <strong>Enviar</strong> refina, vuelve a la app en la que estabas antes de abrir esta ventana y pega ahí texto + fotos · <strong>Copiar</strong> arma el mismo texto pero solo lo deja en el portapapeles, sin tocar ninguna otra ventana (útil para probar).</p>
+    <p class="hint">🎤 dicta por voz · 📷 captura una región y la cita · <strong>Enviar</strong> refina, vuelve a la app en la que estabas antes de abrir esta ventana y pega ahí texto + fotos · <strong>Copiar</strong> arma el mismo texto pero solo lo deja en el portapapeles, sin tocar ninguna otra ventana (útil para probar) · 📌 fija la ventana para que no se oculte sola.</p>
+    <h2 class="help-subheading">Comandos por voz (mientras dictás)</h2>
+    <dl>
+      <dt><code>"etiqueta importante"</code></dt><dd>inserta <code>[IMPORTANTE]</code></dd>
+      <dt><code>"etiqueta categoría trabajo"</code></dt><dd>inserta <code>[CATEGORIA:trabajo]</code></dd>
+      <dt><code>"etiqueta relacionado con X"</code></dt><dd>inserta <code>[RELACIONADO: X]</code></dd>
+    </dl>
+    <p class="hint">Primera versión — decilo como una frase corta y sola (no en medio de otra oración). Si no reconoce el comando, transcribe la frase tal cual la dijiste.</p>
   </section>
 
   <section id="settings" hidden>
@@ -54,6 +64,8 @@
     <label for="modelInput">Modelo de texto</label>
     <input id="modelInput" list="modelsList" autocomplete="off" />
     <datalist id="modelsList"></datalist>
+    <label for="hotkeySelect">Atajo para abrir/cerrar la ventana</label>
+    <select id="hotkeySelect"></select>
     <div class="settings-actions">
       <button type="button" id="testBtn" class="ghost-btn">Probar conexión</button>
       <button type="button" id="saveBtn" class="accent-btn">Guardar</button>

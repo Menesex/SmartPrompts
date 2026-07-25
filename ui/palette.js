@@ -32,9 +32,11 @@ function setStatus(msg, kind = '') {
 
 window.smartprompts.onStatus(setStatus);
 
+const NOMBRE_ATAJO = (a) => a.replace('Space', 'Espacio');
+
 async function cargarEstado() {
   estado = await window.smartprompts.getState();
-  $('hotkeyChip').textContent = estado.hotkey.replace('Space', 'Espacio');
+  $('hotkeyChip').textContent = NOMBRE_ATAJO(estado.hotkey);
   $('modelBadge').textContent = `groq · ${estado.model}`;
   micBtn.disabled = !estado.hasKey;
   micBtn.title = estado.hasKey
@@ -44,7 +46,28 @@ async function cargarEstado() {
   $('apiKeyInput').placeholder = estado.hasKey
     ? '•••••• ya configurada — pegá una nueva solo para reemplazarla'
     : 'gsk_...';
+
+  const hotkeySelect = $('hotkeySelect');
+  hotkeySelect.innerHTML = (estado.atajosDisponibles || [estado.hotkey])
+    .map((a) => `<option value="${a}">${NOMBRE_ATAJO(a)}</option>`)
+    .join('');
+  hotkeySelect.value = estado.hotkey;
+
+  actualizarPin(estado.fijada);
 }
+
+function actualizarPin(fijada) {
+  $('pinBtn').classList.toggle('active', fijada);
+  $('pinBtn').title = fijada
+    ? 'Fijada — hacé clic para que vuelva a ocultarse sola al perder el foco'
+    : 'Fijar: mantener esta ventana abierta aunque hagas clic afuera';
+}
+
+$('pinBtn').addEventListener('click', async () => {
+  const res = await window.smartprompts.togglePin();
+  actualizarPin(res.fijada);
+  setStatus(res.fijada ? 'ventana fijada 📌 — no se va a ocultar sola' : 'ventana ya no está fijada', 'ok');
+});
 
 /* ---------- coloreado en vivo de etiquetas ---------- */
 
@@ -118,19 +141,44 @@ camBtn.addEventListener('click', async () => {
 // texto va apareciendo solo con un desfasaje chico, sin que el usuario tenga
 // que pausar ni cortar la grabación.
 
-const DURACION_SEGMENTO_MS = 4000;
+// 6s en vez de 4s: menos cortes → menos probabilidad de partir una palabra
+// justo en el límite de un segmento (a costa de un pelín más de desfasaje).
+const DURACION_SEGMENTO_MS = 6000;
 const TAMANO_MINIMO_BYTES = 800; // segmentos casi vacíos (silencio al frenar) no se mandan a transcribir
 
 let indiceSegmento = 0;
 let proximoAInsertar = 0;
 const resultadosPendientes = new Map();
 
+// Primera versión de comandos de voz: si el segmento transcripto ES (casi)
+// solamente la frase de comando, se inserta la etiqueta [BRACKET] en vez del
+// texto tal cual. Se espera la frase sola — no en medio de otra oración,
+// porque separar "comando" de "contenido dictado" en lenguaje libre es
+// mucho más difícil y no vale la pena para esta primera versión.
+function interpretarComandoDeVoz(texto) {
+  const t = texto.trim().replace(/[.!?]+$/, '');
+  let m;
+  if (/^(?:etiqueta|etiquetar|marca|marcar)(?:\s+esto)?\s+(?:como\s+)?importante$/i.test(t)) {
+    return '[IMPORTANTE]';
+  }
+  if ((m = t.match(/^(?:etiqueta|etiquetar|marca|marcar)\s+categor[ií]a\s+(.+)$/i))) {
+    return `[CATEGORIA:${m[1].trim()}]`;
+  }
+  if ((m = t.match(/^(?:etiqueta|etiquetar|marca|marcar)\s+relacionado(?:\s+con)?\s+(.+)$/i))) {
+    return `[RELACIONADO: ${m[1].trim()}]`;
+  }
+  return null;
+}
+
 function insertarResultadosEnOrden() {
   while (resultadosPendientes.has(proximoAInsertar)) {
     const texto = resultadosPendientes.get(proximoAInsertar);
     resultadosPendientes.delete(proximoAInsertar);
     proximoAInsertar++;
-    if (texto) insertarEnCursor(texto + ' ');
+    if (!texto) continue;
+    const comando = interpretarComandoDeVoz(texto);
+    insertarEnCursor((comando || texto) + ' ');
+    if (comando) setStatus(`comando de voz → ${comando}`, 'ok');
   }
 }
 
@@ -261,12 +309,18 @@ $('saveBtn').addEventListener('click', async () => {
   const partial = {};
   const key = $('apiKeyInput').value.trim();
   const model = $('modelInput').value.trim();
+  const hotkey = $('hotkeySelect').value;
   if (key) partial.apiKey = key;
   if (model) partial.model = model;
-  await window.smartprompts.saveSettings(partial);
+  if (hotkey) partial.hotkey = hotkey;
+  const res = await window.smartprompts.saveSettings(partial);
   $('apiKeyInput').value = '';
   await cargarEstado();
-  setStatus('ajustes guardados ✓', 'ok');
+  if (hotkey && res.hotkey && res.hotkey !== hotkey) {
+    setStatus(`ese atajo ya estaba en uso — quedó activo ${NOMBRE_ATAJO(res.hotkey)}`, 'warn');
+  } else {
+    setStatus('ajustes guardados ✓', 'ok');
+  }
 });
 
 $('testBtn').addEventListener('click', async () => {

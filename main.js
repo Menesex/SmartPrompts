@@ -23,6 +23,10 @@ const ANCHO = 680;
 const ALTO = 580; // el editor de texto necesita respirar mientras se dicta
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Opciones que se ofrecen en Ajustes. La primera que logre registrarse gana;
+// si el usuario no eligió ninguna todavía, se prueban en este mismo orden.
+const ATAJOS_DISPONIBLES = ['Alt+Space', 'Ctrl+Alt+Space', 'Ctrl+Shift+Space', 'Alt+Q', 'Ctrl+Alt+P'];
+
 let win = null;
 let tray = null;
 let screenshots = null;
@@ -31,6 +35,7 @@ let config = null;
 let atajoActivo = null;
 let capturando = false;
 let entregando = false;
+let fijada = false; // ventana "pineada": no se oculta sola al perder el foco
 
 // Una sola instancia: si abren otra, se muestra la palette de la existente.
 if (!app.requestSingleInstanceLock()) {
@@ -45,10 +50,12 @@ function crearVentana() {
   win = new BrowserWindow({
     width: ANCHO,
     height: ALTO,
+    minWidth: 460,
+    minHeight: 340,
     show: false,
     frame: false,
     transparent: true,
-    resizable: false,
+    resizable: true, // se puede estirar de los bordes aunque no tenga marco
     skipTaskbar: true,
     alwaysOnTop: true,
     icon: nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64),
@@ -58,9 +65,10 @@ function crearVentana() {
   });
   win.loadFile(path.join('ui', 'palette.html'));
 
-  // Como toda command palette: se esconde al perder el foco (el borrador no se pierde).
+  // Como toda command palette: se esconde al perder el foco (el borrador no se pierde) —
+  // salvo que el usuario la haya "fijado" con el botón 📌.
   win.on('blur', () => {
-    if (!capturando && !entregando) win.hide();
+    if (!capturando && !entregando && !fijada) win.hide();
   });
 }
 
@@ -91,19 +99,54 @@ function capturarRegion() {
   });
 }
 
+// Prueba, en orden, el atajo preferido y la lista de respaldo. Actualiza el
+// menú de la bandeja y devuelve el que finalmente quedó activo (puede no ser
+// el pedido, si ya lo tiene tomado otro programa).
+function registrarAtajo(preferido) {
+  globalShortcut.unregisterAll();
+  atajoActivo = null;
+  const candidatos = [preferido, ...ATAJOS_DISPONIBLES.filter((a) => a !== preferido)];
+  for (const atajo of candidatos) {
+    if (globalShortcut.register(atajo, togglePalette)) {
+      atajoActivo = atajo;
+      break;
+    }
+  }
+  if (tray) {
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: `Abrir / ocultar (${atajoActivo || 'sin atajo'})`, click: togglePalette },
+      { type: 'separator' },
+      { label: 'Salir', click: () => app.quit() },
+    ]));
+  }
+  return atajoActivo;
+}
+
 /* ---------- IPC ---------- */
 
 ipcMain.handle('get-state', () => ({
   hotkey: atajoActivo || 'sin atajo',
   model: config.model,
   hasKey: Boolean(config.apiKey),
+  atajosDisponibles: ATAJOS_DISPONIBLES,
+  fijada,
 }));
 
 ipcMain.handle('save-settings', (_e, partial = {}) => {
   if (partial.apiKey) config.apiKey = partial.apiKey;
   if (partial.model) config.model = partial.model;
+  let hotkeyAplicado = atajoActivo;
+  if (partial.hotkey && partial.hotkey !== config.hotkey) {
+    config.hotkey = partial.hotkey;
+    hotkeyAplicado = registrarAtajo(partial.hotkey);
+  }
   ajustes.save(app.getPath('userData'), config);
-  return { ok: true };
+  return { ok: true, hotkey: hotkeyAplicado };
+});
+
+ipcMain.handle('toggle-pin', () => {
+  fijada = !fijada;
+  return { fijada };
 });
 
 ipcMain.handle('test-connection', async () => {
@@ -216,23 +259,13 @@ app.whenReady().then(() => {
   crearVentana();
   screenshots = new Screenshots({ singleWindow: true });
 
-  for (const atajo of ['Alt+Space', 'Ctrl+Alt+Space', 'Ctrl+Shift+Space']) {
-    if (globalShortcut.register(atajo, togglePalette)) {
-      atajoActivo = atajo;
-      break;
-    }
-  }
-  if (!atajoActivo) console.error('[SmartPrompts] no pude registrar ningún atajo global');
-
   const icon = nativeImage.createFromDataURL('data:image/png;base64,' + ICON_B64);
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('SmartPrompts');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: `Abrir / ocultar (${atajoActivo || 'sin atajo'})`, click: togglePalette },
-    { type: 'separator' },
-    { label: 'Salir', click: () => app.quit() },
-  ]));
   tray.on('click', togglePalette);
+
+  registrarAtajo(config.hotkey);
+  if (!atajoActivo) console.error('[SmartPrompts] no pude registrar ningún atajo global');
 
   console.log(`[SmartPrompts] listo — atajo global: ${atajoActivo}`);
   mostrarPalette();

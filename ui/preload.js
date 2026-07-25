@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('smartprompts', {
   send: (payload) => ipcRenderer.invoke('send', payload),
   copy: (payload) => ipcRenderer.invoke('copy', payload),
   hide: () => ipcRenderer.invoke('hide'),
+  togglePin: () => ipcRenderer.invoke('toggle-pin'),
   quit: () => ipcRenderer.invoke('quit'),
   onStatus: (cb) => ipcRenderer.on('status', (_e, msg, kind) => cb(msg, kind)),
 });

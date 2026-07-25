@@ -191,6 +191,7 @@ kbd {
 }
 
 #help h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 8px; }
+#help h2.help-subheading { margin-top: 10px; }
 
 #help dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; }
 #help dt code {
@@ -222,7 +223,7 @@ kbd {
 #settings label { font-size: 12.5px; color: var(--text-secondary); margin-top: 4px; }
 #settings .hint { color: var(--text-tertiary); font-size: 11.5px; }
 
-#settings input {
+#settings input, #settings select {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -232,7 +233,7 @@ kbd {
   font-size: 12.5px;
   outline: none;
 }
-#settings input:focus { border-color: var(--accent); }
+#settings input:focus, #settings select:focus { border-color: var(--accent); }
 
 .settings-actions {
   display: flex;
@@ -260,12 +261,18 @@ kbd {
   min-width: 0;
 }
 
+/* el status es el único texto de largo variable — el que se achica cuando
+   falta lugar. Los botones de la derecha nunca se aprietan ni se cortan. */
+.footer-left { flex: 1; min-width: 0; }
+.footer-right { flex-shrink: 0; }
+
 #status {
   font-size: 12px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 #status.ok { color: var(--ok); }
 #status.warn { color: var(--warn); }
@@ -296,6 +303,7 @@ button { cursor: pointer; font-family: inherit; }
 .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn:hover { background: rgba(180, 85, 240, 0.12); color: var(--text-primary); }
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-btn.active { color: var(--accent); background: rgba(180, 85, 240, 0.16); }
 
 /* botones del pie con ícono + texto, para que se descubran solos */
 .labeled-btn {

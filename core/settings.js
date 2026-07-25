@@ -8,6 +8,7 @@ const path = require('path');
 const DEFAULTS = {
   apiKey: '',
   model: 'openai/gpt-oss-120b',
+  hotkey: 'Alt+Space',
 };
 
 function fileOf(userDataDir) {
