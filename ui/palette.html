@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self'" />
 <title>SmartPrompts</title>
 <link rel="stylesheet" href="palette.css" />
@@ -16,7 +17,10 @@
     </div>
     <div class="header-right">
       <kbd id="hotkeyChip">…</kbd>
-      <button id="settingsBtn" class="icon-btn" title="Ajustes">
+      <button type="button" id="helpBtn" class="icon-btn" title="Ayuda: etiquetas y botones">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+      <button type="button" id="settingsBtn" class="icon-btn" title="Ajustes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
@@ -26,10 +30,22 @@
     <div id="editorWrap">
       <div id="highlights" aria-hidden="true"></div>
       <textarea id="editor" spellcheck="false" autofocus
-        placeholder="Escribí o dictá tu prompt… usá [IMPORTANTE], [ORDEN:1] y el botón de captura para citar imágenes como {foto1}"></textarea>
+        placeholder="Escribí o dictá tu prompt… usá [IMPORTANTE], [ORDEN:1] y el botón de captura para citar imágenes como {foto1}. Tocá el ❔ de arriba para ver la lista completa."></textarea>
     </div>
     <div id="photoStrip" hidden></div>
   </main>
+
+  <section id="help" hidden>
+    <h2>Etiquetas y botones</h2>
+    <dl>
+      <dt><code>[IMPORTANTE]</code></dt><dd>máxima prioridad</dd>
+      <dt><code>[ORDEN:1]</code></dt><dd>orden de lectura o ejecución</dd>
+      <dt><code>[CATEGORIA:trabajo]</code></dt><dd>clasificación tipo Planner</dd>
+      <dt><code>[RELACIONADO: ...]</code></dt><dd>vincula con otra parte o imagen</dd>
+      <dt><code>{foto1}</code></dt><dd>cita la captura n.º 1 (se agrega sola al capturar)</dd>
+    </dl>
+    <p class="hint">🎤 dicta por voz · 📷 captura una región y la cita · <strong>Enviar</strong> refina, vuelve a la app en la que estabas antes de abrir esta ventana y pega ahí texto + fotos · <strong>Copiar</strong> arma el mismo texto pero solo lo deja en el portapapeles, sin tocar ninguna otra ventana (útil para probar).</p>
+  </section>
 
   <section id="settings" hidden>
     <h2>Ajustes</h2>
@@ -39,26 +55,29 @@
     <input id="modelInput" list="modelsList" autocomplete="off" />
     <datalist id="modelsList"></datalist>
     <div class="settings-actions">
-      <button id="testBtn" class="ghost-btn">Probar conexión</button>
-      <button id="saveBtn" class="accent-btn">Guardar</button>
+      <button type="button" id="testBtn" class="ghost-btn">Probar conexión</button>
+      <button type="button" id="saveBtn" class="accent-btn">Guardar</button>
       <span class="spacer"></span>
-      <button id="quitBtn" class="danger-btn">Cerrar SmartPrompts</button>
+      <button type="button" id="quitBtn" class="danger-btn">Cerrar SmartPrompts</button>
     </div>
   </section>
 
   <footer id="footer">
     <div class="footer-left">
-      <button id="micBtn" class="icon-btn" title="Dictar por voz">
+      <button type="button" id="micBtn" class="labeled-btn" title="Dictar por voz — se va escribiendo solo mientras hablás">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        <span>Voz</span>
       </button>
-      <button id="camBtn" class="icon-btn" title="Capturar región de pantalla y citarla">
+      <button type="button" id="camBtn" class="labeled-btn" title="Capturar región de pantalla y citarla como {fotoN}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+        <span>Captura</span>
       </button>
       <span id="status">listo</span>
     </div>
     <div class="footer-right">
       <span id="modelBadge" class="engine-status"></span>
-      <button id="sendBtn" class="accent-btn" title="Ctrl+Enter">
+      <button type="button" id="copyBtn" class="ghost-btn" title="Arma el prompt final y lo deja en el portapapeles, sin pegar en ninguna app">Copiar</button>
+      <button type="button" id="sendBtn" class="accent-btn" title="Ctrl+Enter — oculta esta ventana, vuelve a la app en la que estabas antes y pega ahí el resultado">
         Enviar
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>

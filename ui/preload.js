@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('smartprompts', {
   transcribe: (arrayBuffer) => ipcRenderer.invoke('transcribe', arrayBuffer),
   capture: () => ipcRenderer.invoke('capture'),
   send: (payload) => ipcRenderer.invoke('send', payload),
+  copy: (payload) => ipcRenderer.invoke('copy', payload),
   hide: () => ipcRenderer.invoke('hide'),
   quit: () => ipcRenderer.invoke('quit'),
   onStatus: (cb) => ipcRenderer.on('status', (_e, msg, kind) => cb(msg, kind)),

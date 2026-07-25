@@ -180,6 +180,32 @@ kbd {
 }
 .photo-chip button:hover { color: var(--error); }
 
+/* ---------- ayuda ---------- */
+
+#help {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-raised);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#help h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 8px; }
+
+#help dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; }
+#help dt code {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(180, 85, 240, 0.12);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+#help dd { font-size: 12.5px; color: var(--text-secondary); }
+
+#help .hint { font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }
+#help .hint strong { color: var(--text-secondary); }
+
 /* ---------- ajustes ---------- */
 
 #settings {
@@ -270,6 +296,22 @@ button { cursor: pointer; font-family: inherit; }
 .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn:hover { background: rgba(180, 85, 240, 0.12); color: var(--text-primary); }
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* botones del pie con ícono + texto, para que se descubran solos */
+.labeled-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px 5px 7px;
+  border-radius: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.labeled-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.labeled-btn:hover { background: rgba(180, 85, 240, 0.12); color: var(--text-primary); }
+.labeled-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 #micBtn.recording {
   color: #ff6b6b;

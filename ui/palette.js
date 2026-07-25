@@ -13,12 +13,14 @@ const photoStrip = $('photoStrip');
 const micBtn = $('micBtn');
 const camBtn = $('camBtn');
 const sendBtn = $('sendBtn');
+const copyBtn = $('copyBtn');
 const settingsPanel = $('settings');
+const helpPanel = $('help');
 
 let fotos = []; // { numero, path } de la sesión actual
 let proximoNumero = 1;
 let grabando = false;
-let mediaRecorder = null;
+let micStream = null;
 let estado = { hotkey: '…', model: '', hasKey: false };
 
 /* ---------- estado / status ---------- */
@@ -35,7 +37,9 @@ async function cargarEstado() {
   $('hotkeyChip').textContent = estado.hotkey.replace('Space', 'Espacio');
   $('modelBadge').textContent = `groq · ${estado.model}`;
   micBtn.disabled = !estado.hasKey;
-  micBtn.title = estado.hasKey ? 'Dictar por voz' : 'Para dictar, configurá tu API key de Groq en ⚙';
+  micBtn.title = estado.hasKey
+    ? 'Dictar por voz — se va escribiendo solo mientras hablás'
+    : 'Para dictar, configurá tu API key de Groq en ⚙';
   $('modelInput').value = estado.model;
   $('apiKeyInput').placeholder = estado.hasKey
     ? '•••••• ya configurada — pegá una nueva solo para reemplazarla'
@@ -107,36 +111,78 @@ camBtn.addEventListener('click', async () => {
   }
 });
 
-/* ---------- dictado por voz ---------- */
+/* ---------- dictado por voz, casi en tiempo real ---------- */
+// Whisper (Groq) no hace streaming real: no existe transcripción palabra por
+// palabra. Lo que sí podemos hacer es grabar en segmentos cortos (4s) uno
+// detrás del otro y mandar cada uno a transcribir apenas termina — así el
+// texto va apareciendo solo con un desfasaje chico, sin que el usuario tenga
+// que pausar ni cortar la grabación.
+
+const DURACION_SEGMENTO_MS = 4000;
+const TAMANO_MINIMO_BYTES = 800; // segmentos casi vacíos (silencio al frenar) no se mandan a transcribir
+
+let indiceSegmento = 0;
+let proximoAInsertar = 0;
+const resultadosPendientes = new Map();
+
+function insertarResultadosEnOrden() {
+  while (resultadosPendientes.has(proximoAInsertar)) {
+    const texto = resultadosPendientes.get(proximoAInsertar);
+    resultadosPendientes.delete(proximoAInsertar);
+    proximoAInsertar++;
+    if (texto) insertarEnCursor(texto + ' ');
+  }
+}
+
+function grabarUnSegmento(stream) {
+  return new Promise((resolve) => {
+    const partes = [];
+    const rec = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    rec.addEventListener('dataavailable', (e) => { if (e.data.size) partes.push(e.data); });
+    rec.addEventListener('stop', () => resolve(new Blob(partes, { type: 'audio/webm' })));
+    rec.start();
+    setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, DURACION_SEGMENTO_MS);
+  });
+}
+
+async function transcribirSegmento(blob, idx) {
+  if (blob.size < TAMANO_MINIMO_BYTES) {
+    resultadosPendientes.set(idx, '');
+    insertarResultadosEnOrden();
+    return;
+  }
+  const buffer = await blob.arrayBuffer();
+  const res = await window.smartprompts.transcribe(buffer);
+  if (!res.ok) setStatus(res.error || 'no se entendió un segmento', 'warn');
+  resultadosPendientes.set(idx, res.ok ? res.text : '');
+  insertarResultadosEnOrden();
+}
+
+async function cicloDeDictado(stream) {
+  while (grabando) {
+    const idx = indiceSegmento++;
+    const blob = await grabarUnSegmento(stream);
+    transcribirSegmento(blob, idx); // sin await: ya arranca el próximo segmento en paralelo
+  }
+}
 
 micBtn.addEventListener('click', async () => {
   if (grabando) {
-    mediaRecorder.stop();
+    grabando = false;
+    micBtn.classList.remove('recording');
+    setStatus('terminando de transcribir el último segmento…');
+    micStream.getTracks().forEach((t) => t.stop()); // esto también corta la grabación del segmento actual
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const chunks = [];
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-    mediaRecorder.addEventListener('dataavailable', (e) => chunks.push(e.data));
-    mediaRecorder.addEventListener('stop', async () => {
-      grabando = false;
-      micBtn.classList.remove('recording');
-      stream.getTracks().forEach((t) => t.stop());
-      setStatus('transcribiendo…');
-      const buffer = await new Blob(chunks).arrayBuffer();
-      const res = await window.smartprompts.transcribe(buffer);
-      if (res.ok && res.text) {
-        insertarEnCursor(res.text + ' ');
-        setStatus('dictado transcripto ✓', 'ok');
-      } else {
-        setStatus(res.error || 'no se entendió el audio', 'error');
-      }
-    });
-    mediaRecorder.start();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     grabando = true;
+    indiceSegmento = 0;
+    proximoAInsertar = 0;
+    resultadosPendientes.clear();
     micBtn.classList.add('recording');
-    setStatus('grabando… (clic de nuevo para terminar)');
+    setStatus('escuchando… el texto va apareciendo solo (clic de nuevo para terminar)');
+    cicloDeDictado(micStream);
   } catch {
     setStatus('no pude acceder al micrófono — revisá permisos de Windows', 'error');
   }
@@ -164,12 +210,34 @@ async function enviar() {
 
 sendBtn.addEventListener('click', enviar);
 
+copyBtn.addEventListener('click', async () => {
+  const text = editor.value.trim();
+  if (!text) {
+    setStatus('escribí algo primero');
+    return;
+  }
+  copyBtn.disabled = true;
+  setStatus('armando el prompt final…');
+  const res = await window.smartprompts.copy({ text, photos: fotos });
+  copyBtn.disabled = false;
+  if (res.ok) {
+    const aviso = res.fotosNoIncluidas
+      ? ` (las ${res.fotosNoIncluidas} foto(s) citadas no se copian — usá "Enviar" para adjuntarlas)`
+      : '';
+    setStatus(`texto copiado al portapapeles ✓${aviso}`, 'ok');
+  } else {
+    setStatus(res.error || 'no se pudo copiar', 'error');
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.ctrlKey) {
     e.preventDefault();
     enviar();
   } else if (e.key === 'Escape') {
-    if (!settingsPanel.hidden) {
+    if (!helpPanel.hidden) {
+      helpPanel.hidden = true;
+    } else if (!settingsPanel.hidden) {
       settingsPanel.hidden = true;
     } else {
       window.smartprompts.hide(); // el borrador queda guardado en la ventana oculta
@@ -177,9 +245,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* ---------- ajustes ---------- */
+/* ---------- ayuda y ajustes ---------- */
+
+$('helpBtn').addEventListener('click', () => {
+  settingsPanel.hidden = true;
+  helpPanel.hidden = !helpPanel.hidden;
+});
 
 $('settingsBtn').addEventListener('click', () => {
+  helpPanel.hidden = true;
   settingsPanel.hidden = !settingsPanel.hidden;
 });
 

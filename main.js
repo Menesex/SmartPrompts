@@ -1,7 +1,7 @@
 // Proceso principal de SmartPrompts: ventanas, atajo global, bandeja, IPC.
 // La lógica de negocio vive en /core y el historial en /data.
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, session, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, session, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -20,7 +20,7 @@ const ICON_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAIAAACxN37FAAACl0lEQVR4nO3SUQkAIBTAwFfSpgYzgiUEYRxcgH1s9jqQMd8L4CFDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphibF0KQYmhRDk2JoUgxNiqFJMTQphiblApOo8vYkDQFdAAAAAElFTkSuQmCC';
 
 const ANCHO = 680;
-const ALTO = 480;
+const ALTO = 580; // el editor de texto necesita respirar mientras se dicta
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let win = null;
@@ -67,7 +67,7 @@ function crearVentana() {
 function mostrarPalette() {
   if (!win) return;
   const area = screen.getPrimaryDisplay().workArea;
-  win.setPosition(Math.round(area.x + (area.width - ANCHO) / 2), area.y + 140);
+  win.setPosition(Math.round(area.x + (area.width - ANCHO) / 2), area.y + 90);
   win.show();
   win.focus();
 }
@@ -146,20 +146,25 @@ ipcMain.handle('capture', async () => {
   }
 });
 
+async function prepararEntrega({ text, photos }) {
+  let refined = null;
+  if (config.apiKey) {
+    status('refinando con Groq…');
+    try {
+      refined = await groq.refinePrompt(text, config);
+    } catch (err) {
+      status(`Groq falló (${err.message}) — sigo con el texto sin refinar`, 'warn');
+    }
+  }
+  const base = refined || text;
+  const { deliveredText, photoPaths } = buildDeliveryText(base, photos);
+  return { rawText: text, refined, base, deliveredText, photoPaths };
+}
+
 ipcMain.handle('send', async (_e, { text, photos = [] }) => {
   entregando = true;
   try {
-    let refined = null;
-    if (config.apiKey) {
-      status('refinando con Groq…');
-      try {
-        refined = await groq.refinePrompt(text, config);
-      } catch (err) {
-        status(`Groq falló (${err.message}) — envío el texto sin refinar`, 'warn');
-      }
-    }
-    const base = refined || text;
-    const { deliveredText, photoPaths } = buildDeliveryText(base, photos);
+    const { rawText, refined, base, deliveredText, photoPaths } = await prepararEntrega({ text, photos });
 
     await deliver({
       deliveredText,
@@ -169,13 +174,7 @@ ipcMain.handle('send', async (_e, { text, photos = [] }) => {
     });
 
     if (db) {
-      db.saveDelivery({
-        rawText: text,
-        refinedText: refined,
-        deliveredText,
-        photos,
-        tagNames: tagNames(base),
-      });
+      db.saveDelivery({ rawText, refinedText: refined, deliveredText, photos, tagNames: tagNames(base) });
     }
     return { ok: true };
   } catch (err) {
@@ -183,6 +182,19 @@ ipcMain.handle('send', async (_e, { text, photos = [] }) => {
     return { ok: false, error: err.message };
   } finally {
     entregando = false;
+  }
+});
+
+// Plan B: arma el mismo texto final pero SOLO lo copia al portapapeles —
+// no toca el foco de ninguna ventana ni simula ningún pegado. Pensado para
+// probar/leer el resultado sin efectos secundarios sobre lo que tengas abierto.
+ipcMain.handle('copy', async (_e, { text, photos = [] }) => {
+  try {
+    const { deliveredText, photoPaths } = await prepararEntrega({ text, photos });
+    clipboard.writeText(deliveredText);
+    return { ok: true, fotosNoIncluidas: photoPaths.length };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 });
 
