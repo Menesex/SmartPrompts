@@ -9,6 +9,7 @@ const DEFAULTS = {
   apiKey: '',
   model: 'openai/gpt-oss-120b',
   hotkey: 'Alt+Space',
+  language: '', // '' = Whisper detecta el idioma solo; 'es'/'en' para forzarlo
 };
 
 function fileOf(userDataDir) {

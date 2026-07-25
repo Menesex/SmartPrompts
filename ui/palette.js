@@ -53,6 +53,8 @@ async function cargarEstado() {
     .join('');
   hotkeySelect.value = estado.hotkey;
 
+  $('languageSelect').value = estado.language || '';
+
   actualizarPin(estado.fijada);
 }
 
@@ -182,13 +184,22 @@ function insertarResultadosEnOrden() {
 }
 
 // Un solo AudioContext por sesión de dictado (no uno por segmento) para medir
-// si hubo volumen real en cada tramo de 6s. Si un segmento quedó en puro
-// silencio/ruido de fondo bajo, ni se manda a transcribir — así dejar el
-// micrófono prendido sin hablar no gasta cupo de Groq.
+// el volumen en tiempo real. Sirve para dos cosas:
+// 1) si un segmento quedó en puro silencio, ni se manda a Groq a transcribir
+//    (no gasta cupo de la API por dejar el micrófono prendido sin hablar).
+// 2) cortar el segmento apenas hacés una pausa, en vez de esperar siempre
+//    los DURACION_SEGMENTO_MS completos — esto es clave porque un clip con
+//    una frase cortita seguida de varios segundos de silencio es el caso
+//    donde Whisper más "alucina" (repite la frase sola para llenar el
+//    silencio, por eso a veces salía [IMPORTANTE] [IMPORTANTE] duplicado).
 let audioCtx = null;
 let analyser = null;
 let monitorId = null;
 let huboSonidoEnSegmento = false;
+let ultimoSonidoTs = 0;
+
+const SILENCIO_PARA_CORTAR_MS = 1200; // pausa que se interpreta como "terminé de hablar"
+const MIN_GRABACION_MS = 700; // no cortar antes de esto, para no partir la primera palabra
 
 function iniciarMonitoreoDeVolumen(stream) {
   audioCtx = new AudioContext();
@@ -200,7 +211,10 @@ function iniciarMonitoreoDeVolumen(stream) {
   monitorId = setInterval(() => {
     analyser.getByteFrequencyData(datos);
     const promedio = datos.reduce((a, b) => a + b, 0) / datos.length;
-    if (promedio > UMBRAL_VOLUMEN) huboSonidoEnSegmento = true;
+    if (promedio > UMBRAL_VOLUMEN) {
+      huboSonidoEnSegmento = true;
+      ultimoSonidoTs = Date.now();
+    }
   }, 200);
 }
 
@@ -213,12 +227,28 @@ function detenerMonitoreoDeVolumen() {
 
 function grabarUnSegmento(stream) {
   huboSonidoEnSegmento = false;
+  ultimoSonidoTs = 0;
+  const inicio = Date.now();
   return new Promise((resolve) => {
     const partes = [];
     const rec = new MediaRecorder(stream, { mimeType: 'audio/webm' });
     rec.addEventListener('dataavailable', (e) => { if (e.data.size) partes.push(e.data); });
-    rec.addEventListener('stop', () => resolve({ blob: new Blob(partes, { type: 'audio/webm' }), huboSonido: huboSonidoEnSegmento }));
+    rec.addEventListener('stop', () => {
+      clearInterval(chequeoSilencio);
+      resolve({ blob: new Blob(partes, { type: 'audio/webm' }), huboSonido: huboSonidoEnSegmento });
+    });
     rec.start();
+
+    // corte anticipado: ya hablaste algo y hace rato que hay silencio
+    const chequeoSilencio = setInterval(() => {
+      const transcurrido = Date.now() - inicio;
+      const silencioReciente = ultimoSonidoTs && (Date.now() - ultimoSonidoTs) > SILENCIO_PARA_CORTAR_MS;
+      if (transcurrido > MIN_GRABACION_MS && huboSonidoEnSegmento && silencioReciente && rec.state !== 'inactive') {
+        rec.stop();
+      }
+    }, 250);
+
+    // tope duro: si seguís hablando sin pausas, igual se corta acá
     setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, DURACION_SEGMENTO_MS);
   });
 }
@@ -346,9 +376,11 @@ $('saveBtn').addEventListener('click', async () => {
   const key = $('apiKeyInput').value.trim();
   const model = $('modelInput').value.trim();
   const hotkey = $('hotkeySelect').value;
+  const language = $('languageSelect').value;
   if (key) partial.apiKey = key;
   if (model) partial.model = model;
   if (hotkey) partial.hotkey = hotkey;
+  partial.language = language; // puede ser '' (automático) a propósito
   const res = await window.smartprompts.saveSettings(partial);
   $('apiKeyInput').value = '';
   await cargarEstado();

@@ -127,6 +127,7 @@ function registrarAtajo(preferido) {
 ipcMain.handle('get-state', () => ({
   hotkey: atajoActivo || 'sin atajo',
   model: config.model,
+  language: config.language || '',
   hasKey: Boolean(config.apiKey),
   atajosDisponibles: ATAJOS_DISPONIBLES,
   fijada,
@@ -135,6 +136,7 @@ ipcMain.handle('get-state', () => ({
 ipcMain.handle('save-settings', (_e, partial = {}) => {
   if (partial.apiKey) config.apiKey = partial.apiKey;
   if (partial.model) config.model = partial.model;
+  if (typeof partial.language === 'string') config.language = partial.language; // '' = automático, es válido
   let hotkeyAplicado = atajoActivo;
   if (partial.hotkey && partial.hotkey !== config.hotkey) {
     config.hotkey = partial.hotkey;
