@@ -45,11 +45,14 @@ async function refinePrompt(text, { apiKey, model }) {
   return out || text;
 }
 
-async function transcribe(buffer, { apiKey, language = 'es' }) {
+async function transcribe(buffer, { apiKey, language }) {
   const form = new FormData();
   form.append('file', new Blob([buffer], { type: 'audio/webm' }), 'dictado.webm');
   form.append('model', 'whisper-large-v3-turbo');
-  form.append('language', language);
+  // Sin "language" fijo, Whisper detecta el idioma hablado en cada segmento
+  // (útil para dictar en español o inglés indistintamente). Si algún día se
+  // quiere forzar uno, config.language ya queda disponible para setearlo.
+  if (language) form.append('language', language);
   form.append('response_format', 'json');
   const res = await api('/audio/transcriptions', { apiKey, method: 'POST', body: form });
   const data = await res.json();

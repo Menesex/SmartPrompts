@@ -145,29 +145,28 @@ camBtn.addEventListener('click', async () => {
 // justo en el límite de un segmento (a costa de un pelín más de desfasaje).
 const DURACION_SEGMENTO_MS = 6000;
 const TAMANO_MINIMO_BYTES = 800; // segmentos casi vacíos (silencio al frenar) no se mandan a transcribir
+const UMBRAL_VOLUMEN = 12; // 0-255; si nunca se supera durante el segmento, no se manda a Groq
 
 let indiceSegmento = 0;
 let proximoAInsertar = 0;
 const resultadosPendientes = new Map();
 
-// Primera versión de comandos de voz: si el segmento transcripto ES (casi)
-// solamente la frase de comando, se inserta la etiqueta [BRACKET] en vez del
-// texto tal cual. Se espera la frase sola — no en medio de otra oración,
-// porque separar "comando" de "contenido dictado" en lenguaje libre es
-// mucho más difícil y no vale la pena para esta primera versión.
-function interpretarComandoDeVoz(texto) {
-  const t = texto.trim().replace(/[.!?]+$/, '');
-  let m;
-  if (/^(?:etiqueta|etiquetar|marca|marcar)(?:\s+esto)?\s+(?:como\s+)?importante$/i.test(t)) {
-    return '[IMPORTANTE]';
-  }
-  if ((m = t.match(/^(?:etiqueta|etiquetar|marca|marcar)\s+categor[ií]a\s+(.+)$/i))) {
-    return `[CATEGORIA:${m[1].trim()}]`;
-  }
-  if ((m = t.match(/^(?:etiqueta|etiquetar|marca|marcar)\s+relacionado(?:\s+con)?\s+(.+)$/i))) {
-    return `[RELACIONADO: ${m[1].trim()}]`;
-  }
-  return null;
+// Comandos de voz: a diferencia de la v1, ahora buscan la frase de comando
+// EN CUALQUIER PARTE del segmento (no exigen que sea el segmento completo) —
+// porque en la práctica casi nunca decís el comando solo, aislado en sus
+// propios 6 segundos: lo pensás en voz alta en medio de la dictada. Cada
+// coincidencia se reemplaza por la etiqueta, el resto del texto se conserva.
+function aplicarComandosDeVoz(texto) {
+  let antes;
+  let out = texto;
+  do {
+    antes = out;
+    out = out
+      .replace(/\b(?:etiqueta|etiquetar|marca|marcar)\s+(?:esto\s+)?(?:como\s+)?importante\b[.,]?\s*/i, '[IMPORTANTE] ')
+      .replace(/\b(?:etiqueta|etiquetar|marca|marcar)\s+categor[ií]a\s+([a-záéíóúñ0-9]+)\b[.,]?\s*/i, (_, palabra) => `[CATEGORIA:${palabra}] `)
+      .replace(/\b(?:etiqueta|etiquetar|marca|marcar)\s+relacionado(?:\s+con)?\s+([^.,;]+)[.,]?\s*/i, (_, resto) => `[RELACIONADO: ${resto.trim()}] `);
+  } while (out !== antes); // por si dijiste más de un comando en el mismo segmento
+  return { texto: out, huboComando: out !== texto };
 }
 
 function insertarResultadosEnOrden() {
@@ -176,26 +175,57 @@ function insertarResultadosEnOrden() {
     resultadosPendientes.delete(proximoAInsertar);
     proximoAInsertar++;
     if (!texto) continue;
-    const comando = interpretarComandoDeVoz(texto);
-    insertarEnCursor((comando || texto) + ' ');
-    if (comando) setStatus(`comando de voz → ${comando}`, 'ok');
+    const { texto: final, huboComando } = aplicarComandosDeVoz(texto);
+    insertarEnCursor(final + (final.endsWith(' ') ? '' : ' '));
+    if (huboComando) setStatus('comando de voz aplicado ✓', 'ok');
   }
 }
 
+// Un solo AudioContext por sesión de dictado (no uno por segmento) para medir
+// si hubo volumen real en cada tramo de 6s. Si un segmento quedó en puro
+// silencio/ruido de fondo bajo, ni se manda a transcribir — así dejar el
+// micrófono prendido sin hablar no gasta cupo de Groq.
+let audioCtx = null;
+let analyser = null;
+let monitorId = null;
+let huboSonidoEnSegmento = false;
+
+function iniciarMonitoreoDeVolumen(stream) {
+  audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+  const datos = new Uint8Array(analyser.frequencyBinCount);
+  monitorId = setInterval(() => {
+    analyser.getByteFrequencyData(datos);
+    const promedio = datos.reduce((a, b) => a + b, 0) / datos.length;
+    if (promedio > UMBRAL_VOLUMEN) huboSonidoEnSegmento = true;
+  }, 200);
+}
+
+function detenerMonitoreoDeVolumen() {
+  clearInterval(monitorId);
+  if (audioCtx) audioCtx.close();
+  audioCtx = null;
+  analyser = null;
+}
+
 function grabarUnSegmento(stream) {
+  huboSonidoEnSegmento = false;
   return new Promise((resolve) => {
     const partes = [];
     const rec = new MediaRecorder(stream, { mimeType: 'audio/webm' });
     rec.addEventListener('dataavailable', (e) => { if (e.data.size) partes.push(e.data); });
-    rec.addEventListener('stop', () => resolve(new Blob(partes, { type: 'audio/webm' })));
+    rec.addEventListener('stop', () => resolve({ blob: new Blob(partes, { type: 'audio/webm' }), huboSonido: huboSonidoEnSegmento }));
     rec.start();
     setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, DURACION_SEGMENTO_MS);
   });
 }
 
-async function transcribirSegmento(blob, idx) {
-  if (blob.size < TAMANO_MINIMO_BYTES) {
-    resultadosPendientes.set(idx, '');
+async function transcribirSegmento({ blob, huboSonido }, idx) {
+  if (!huboSonido || blob.size < TAMANO_MINIMO_BYTES) {
+    resultadosPendientes.set(idx, ''); // segmento silencioso: no se gasta cupo de Groq en él
     insertarResultadosEnOrden();
     return;
   }
@@ -209,8 +239,8 @@ async function transcribirSegmento(blob, idx) {
 async function cicloDeDictado(stream) {
   while (grabando) {
     const idx = indiceSegmento++;
-    const blob = await grabarUnSegmento(stream);
-    transcribirSegmento(blob, idx); // sin await: ya arranca el próximo segmento en paralelo
+    const segmento = await grabarUnSegmento(stream);
+    transcribirSegmento(segmento, idx); // sin await: ya arranca el próximo segmento en paralelo
   }
 }
 
@@ -220,16 +250,22 @@ micBtn.addEventListener('click', async () => {
     micBtn.classList.remove('recording');
     setStatus('terminando de transcribir el último segmento…');
     micStream.getTracks().forEach((t) => t.stop()); // esto también corta la grabación del segmento actual
+    detenerMonitoreoDeVolumen();
     return;
   }
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // echoCancellation/noiseSuppression: si tus auriculares "se escuchan doble"
+    // o el mic capta el audio de la PC, esto debería atenuarlo bastante.
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
     grabando = true;
     indiceSegmento = 0;
     proximoAInsertar = 0;
     resultadosPendientes.clear();
     micBtn.classList.add('recording');
     setStatus('escuchando… el texto va apareciendo solo (clic de nuevo para terminar)');
+    iniciarMonitoreoDeVolumen(micStream);
     cicloDeDictado(micStream);
   } catch {
     setStatus('no pude acceder al micrófono — revisá permisos de Windows', 'error');

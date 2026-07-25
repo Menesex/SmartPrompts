@@ -15,7 +15,9 @@ function buildDeliveryText(text, sessionPhotos = []) {
 
   const cuerpo = text.replace(FOTO_RE, (m, d) => {
     const n = Number(d);
-    return posicion.has(n) ? `(ver imagen ${posicion.get(n)} adjunta)` : '(imagen no disponible)';
+    // Si esto aparece y vos SÍ capturaste esa foto, es un bug real — avisale a
+    // Claude con el número exacto que ves acá, todavía no se pudo reproducir.
+    return posicion.has(n) ? `(ver imagen ${posicion.get(n)} adjunta)` : `(imagen {foto${n}} no disponible)`;
   });
 
   const leyenda = buildLegend(parsed, adjuntas.length > 0);
